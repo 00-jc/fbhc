@@ -94,7 +94,15 @@ pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, s
 
     try emit.functionHeader(w, K, "representative_bits_hash", true);
     try w.print("{{\n  {s} result = 0;\n\n", .{ty});
-
+    if (@clz(mask) >= @bitSizeOf(K) - 64 or K == u64)
+    {
+        try w.writeAll("#if (defined(__BMI2__) && defined(__x86_64__)) && defined(__has_builtin) && defined(__GNUC__) && __has_builtin(__builtin_ia32_pext_di) && !defined(__znver1__) && !defined(__znver2__)\n");
+        if (K == u64)
+            try w.print("result = __builtin_ia32_pext_di((uint64_t)input, 0x{X});\n", .{mask})
+        else
+            try w.print("result = ({s})__builtin_ia32_pext_di((uint64_t)input, 0x{X});\n", .{ty, mask});
+        try w.writeAll("#else\n");
+    }
     var runs: Runs(K) = .{ .rem = mask };
     while (runs.next()) |r|
     {
@@ -102,6 +110,7 @@ pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, s
         try emit.writeConst(w, K, r.mask, false);
         try w.print(") << {d};\n", .{r.dest});
     }
+    if (@clz(mask) >= @bitSizeOf(K) - 64 or K == u64) try w.writeAll("#endif\n");
     try w.writeAll("  return result;\n}\n");
     try w.print("static const FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = {d};\n", .{@as(u64, 1) << @as(u6, @intCast(@popCount(mask)))});
     try w.print("static const {s} TABLE_REPR[REPRESENTATIVE_TABLE_SIZE] = {{\n", .{ty});
