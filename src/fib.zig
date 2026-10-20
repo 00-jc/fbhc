@@ -45,7 +45,7 @@ pub fn find(comptime K: type, nums: []const K, bits_for_hash: usize) ?Found(K)
 
 pub fn emitCode(w: *std.Io.Writer, comptime K: type, found: Found(K), nums: []const K, strings: []const []const u8) !void
 {
-    try w.print("static const {s} TABLE_FIB[] = {{\n", .{emit.cType(K)});
+    try w.print("static FBHC_CONSTEXPR {s} TABLE_FIB[] = {{\n", .{emit.cType(K)});
     for (nums, strings) |n, s|
     {
         try w.print("\t[{d:<3}] = ", .{@as(u64, @intCast((n *% found.magic) >> found.shift))});

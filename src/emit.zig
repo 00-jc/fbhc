@@ -33,7 +33,7 @@ pub fn prelude(w: *std.Io.Writer, comptime K: type) !void
         \\#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || defined(__cplusplus)
         \\# define FBHC_CONSTEXPR constexpr
         \\#else
-        \\# define FBHC_CONSTEXPR
+        \\# define FBHC_CONSTEXPR const
         \\#endif
         \\
     );

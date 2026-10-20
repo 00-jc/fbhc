@@ -112,7 +112,7 @@ pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, s
     }
     if (@clz(mask) >= @bitSizeOf(K) - 64 or K == u64) try w.writeAll("#endif\n");
     try w.writeAll("  return result;\n}\n");
-    try w.print("static const FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = {d};\n", .{@as(u64, 1) << @as(u6, @intCast(@popCount(mask)))});
+    try w.print("static FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = {d};\n", .{@as(u64, 1) << @as(u6, @intCast(@popCount(mask)))});
     try w.print("static const {s} TABLE_REPR[REPRESENTATIVE_TABLE_SIZE] = {{\n", .{ty});
     for (nums, strings) |x, s|
     {
