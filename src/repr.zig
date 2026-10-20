@@ -92,7 +92,7 @@ pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, s
     const S = std.math.Log2Int(K);
     const ty = emit.cType(K);
 
-    try emit.functionHeader(w, K, "representative_bits_hash", false);
+    try emit.functionHeader(w, K, "representative_bits_hash", true);
     try w.print("{{\n  static const FBHC_CONSTEXPR {s} REPRESENTATIVE_BITS = ", .{ty});
     try emit.writeConst(w, K, mask, false);
     try w.print(";\n  {s} result = 0;\n\n", .{ty});
