@@ -148,8 +148,54 @@ pub fn main(ini: std.process.Init) !void
                 }
             }
         }
-        const fmt_represent = "static const FBHC_CONSTEXPR uint64_t REPRESENTATIVE_BITS = 0x{X};";
-        try interface.print(fmt_represent ++ "\n", .{final_mask});
+        const fmt_represent_func =
+            \\#ifdef __GNUC__
+            \\__attribute__((__always_inline__, const, __flatten__, __unused__))
+            \\#endif
+            \\#ifdef __cplusplus
+            \\constexpr
+            \\#endif
+            \\static inline uint64_t
+            \\representative_bits_hash(uint64_t input)
+            \\{{
+            \\  static const FBHC_CONSTEXPR uint64_t REPRESENTATIVE_BITS = 0x{X};
+            \\  uint64_t result = 0;
+            \\
+            ;
+        try interface.print(fmt_represent_func ++ "\n", .{final_mask});
+        var dest: usize = 0;
+        var rem = final_mask;
+        while (rem != 0)
+        {
+            const start = @ctz(rem);
+            const end = @ctz(~(rem >> @intCast(start)));
+            const mask = ~@as(u64, 0) >> @intCast(64 - end);
+            try interface.print("  result |= ((input >> {d}) & 0x{X}) << {d};\n", .{ start, mask, dest });
+            rem &= ~(mask << @intCast(start));
+            dest += end;
+        }
+        try interface.writeAll("  return result;\n}\n");
+        try interface.print("static const FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = {d};\n", .{@as(u64, 1) << @intCast(@popCount(final_mask))});
+        const r_table_header = "static const uint64_t TABLE_REPR[REPRESENTATIVE_TABLE_SIZE] = {\n";
+        const r_table_closer = "};\n";
+        try interface.writeAll(r_table_header);
+        for (nums.items, strings.items) |x, s|
+        {
+            var result: usize = 0;
+            rem = final_mask;
+            dest = 0;
+            while (rem != 0)
+            {
+                const start = @ctz(rem);
+                const end = @ctz(~(rem >> @intCast(start)));
+                const mask = ~@as(u64, 0) >> @intCast(64 - end);
+                result |= ((x >> @intCast(start)) & mask) << @intCast(dest);
+                rem &= ~(mask << @intCast(start));
+                dest += end;
+            }
+            try interface.print("\t[{d:<3}] = 0x{X:0>16}, // {s}\n", .{ result, x, s });
+        }
+        try interface.writeAll(r_table_closer);
     }
 
     var random = std.Random.DefaultPrng.init(0x9E3779B185EBCA87);
@@ -188,7 +234,7 @@ pub fn main(ini: std.process.Init) !void
 
     if (found_magic) |magic|
     {
-        const table_header = "static const uint64_t TABLE[] = {\n";
+        const table_header = "static const uint64_t TABLE_FIB[] = {\n";
         const table_closer = "};\n";
 
         try interface.writeAll(table_header);
