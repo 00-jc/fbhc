@@ -26,6 +26,8 @@ pub fn prelude(w: *std.Io.Writer, comptime K: type) !void
         \\ * ============================================================
         \\ */
         \\
+        \\#include <stdint.h>
+        \\
         \\#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || defined(__cplusplus)
         \\# define FBHC_CONSTEXPR constexpr
         \\#else
