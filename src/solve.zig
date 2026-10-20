@@ -1,12 +1,12 @@
 //! Branch-and-bound search for a small set of bit positions that
 //! distinguishes every pair of keys.
 
-pub fn solve(remaining_diffs: []u64, chosen_bits: u64, max_bits: usize) ?u64
+pub fn solve(comptime K: type, remaining_diffs: []K, chosen_bits: K, max_bits: usize) ?K
 {
     if (remaining_diffs.len == 0) return chosen_bits;
     if (@popCount(chosen_bits) >= max_bits) return null;
 
-    var fewest_bit_count: usize = 64;
+    var fewest_bit_count: usize = @bitSizeOf(K);
     var fewest_index: usize = 0;
     for (remaining_diffs, 0..) |diff, index|
     {
@@ -36,7 +36,7 @@ pub fn solve(remaining_diffs: []u64, chosen_bits: u64, max_bits: usize) ?u64
             }
         }
 
-        if (solve(remaining_diffs[0..unseparated_count], chosen_bits | candidate_bit, max_bits)) |found_mask|
+        if (solve(K, remaining_diffs[0..unseparated_count], chosen_bits | candidate_bit, max_bits)) |found_mask|
             return found_mask;
     }
     return null;

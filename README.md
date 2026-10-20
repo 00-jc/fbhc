@@ -27,7 +27,11 @@ gives you two independent perfect-hash options; use whichever suits you:
 
 ```sh
 ./zig-out/bin/fbhc examples/keywords.txt
+./zig-out/bin/fbhc --use128 examples/keywords.txt   # keys up to 16 bytes, packed in unsigned __int128
 ```
+
+With `--use128` the generated code uses `unsigned __int128` (GCC/Clang) and a
+`FBHC_U128(hi, lo)` macro for constants.
 
 Output for `examples/keywords.txt`:
 
@@ -102,7 +106,7 @@ fib_hash(uint64_t input)
 noexcept
 #endif
 {
-  return ((input * 0xf395ca4ef2d38abb) >> 60);
+  return ((input * 0xF395CA4EF2D38ABB) >> 60);
 }
 #undef FBHC_CONSTEXPR
 ```
@@ -112,5 +116,6 @@ little-endian), calling `fib_hash` (or `representative_bits_hash`), and comparin
 
 ## Errors
 
-- `KeyTooLong`: a keyword is longer than 8 bytes.
+- `KeyTooLong`: a keyword is longer than 8 bytes (16 with `--use128`).
+- `UnknownFlag` / `TooManyFiles` / `NoFileInArgs`: bad command line.
 - `IdenticalKeys`: the input contains duplicates.

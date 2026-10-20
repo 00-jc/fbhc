@@ -1,0 +1,61 @@
+//! C output helpers shared by every generated section.
+
+const std = @import("std");
+
+pub fn cType(comptime K: type) []const u8
+{
+    return switch (K)
+    {
+        u64 => "uint64_t",
+        u128 => "unsigned __int128",
+        else => @compileError("unsupported key type"),
+    };
+}
+
+pub fn prelude(w: *std.Io.Writer, comptime K: type) !void
+{
+    try w.writeAll(
+        \\#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || defined(__cplusplus)
+        \\# define FBHC_CONSTEXPR constexpr
+        \\#else
+        \\# define FBHC_CONSTEXPR
+        \\#endif
+        \\
+    );
+    if (K == u128) try w.writeAll("#define FBHC_U128(hi, lo) ((((unsigned __int128)(hi)) << 64) | (unsigned __int128)(lo))\n");
+}
+
+pub fn epilogue(w: *std.Io.Writer, comptime K: type) !void
+{
+    if (K == u128) try w.writeAll("#undef FBHC_U128\n");
+    try w.writeAll("#undef FBHC_CONSTEXPR\n");
+}
+
+/// Writes `v` as a C constant of type `cType(K)`.
+pub fn writeConst(w: *std.Io.Writer, comptime K: type, v: K, comptime pad: bool) !void
+{
+    if (K == u128)
+    {
+        const hi: u64 = @truncate(v >> 64);
+        const lo: u64 = @truncate(v);
+        if (pad) try w.print("FBHC_U128(0x{X:0>16}, 0x{X:0>16})", .{ hi, lo })
+        else try w.print("FBHC_U128(0x{X}, 0x{X})", .{ hi, lo });
+    }
+    else if (pad) try w.print("0x{X:0>16}", .{v})
+    else try w.print("0x{X}", .{v});
+}
+
+pub fn functionHeader(w: *std.Io.Writer, comptime K: type, name: []const u8, noexcept: bool) !void
+{
+    try w.writeAll(
+        \\#ifdef __GNUC__
+        \\__attribute__((__always_inline__, const, __flatten__, __unused__))
+        \\#endif
+        \\#ifdef __cplusplus
+        \\constexpr
+        \\#endif
+        \\
+    );
+    try w.print("static inline {s}\n{s}({s} input)\n", .{ cType(K), name, cType(K) });
+    if (noexcept) try w.writeAll("#ifdef __cplusplus\nnoexcept\n#endif\n");
+}
