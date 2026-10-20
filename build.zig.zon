@@ -1,0 +1,7 @@
+.{
+    .name = .fbhc,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.17.0-dev.1503+1f1bee62e",
+    .paths = .{""},
+    .fingerprint = 0xdc5b9c0c99538d8,
+}

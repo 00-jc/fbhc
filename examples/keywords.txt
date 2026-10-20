@@ -1,0 +1,15 @@
+while
+echo
+float
+if
+false
+prompt
+boolean
+void
+return
+string
+int
+true
+let
+function
+do
