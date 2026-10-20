@@ -93,8 +93,7 @@ pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, s
     const ty = emit.cType(K);
 
     try emit.functionHeader(w, K, "representative_bits_hash", true);
-    try emit.writeConst(w, K, mask, false);
-    try w.print(";\n  {s} result = 0;\n\n", .{ty});
+    try w.print("{{\n  {s} result = 0;\n\n", .{ty});
 
     var runs: Runs(K) = .{ .rem = mask };
     while (runs.next()) |r|
