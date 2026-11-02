@@ -28,6 +28,7 @@ gives you two independent perfect-hash options; use whichever suits you:
 ```sh
 ./zig-out/bin/fbhc examples/keywords.txt
 ./zig-out/bin/fbhc --use128 examples/keywords.txt   # keys up to 16 bytes, packed in unsigned __int128
+./zig-out/bin/fbhc --prefix kw_ examples/keywords.txt  # prefixes every generated function and table: kw_fib_hash(), kw_TABLE_FIB[], ...
 ```
 
 With `--use128` the generated code uses `unsigned __int128` (GCC/Clang) and a
@@ -51,26 +52,49 @@ Output for `examples/keywords.txt`:
 
 #include <stdint.h>
 
-#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || defined(__cplusplus)
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || (defined(__cplusplus) && __cplusplus >= 201103L)
 # define FBHC_CONSTEXPR constexpr
 #else
-# define FBHC_CONSTEXPR
+# define FBHC_CONSTEXPR const
+#endif
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || defined(__cplusplus)
+# define FBHC_INLINE inline
+#elif defined(__GNUC__)
+# define FBHC_INLINE __inline__
+#else
+# define FBHC_INLINE
+#endif
+#if defined(__cplusplus) && __cplusplus >= 201103L
+# define FBHC_CONSTEXPR11 constexpr
+# define FBHC_NOEXCEPT noexcept
+#elif defined(__cplusplus)
+# define FBHC_CONSTEXPR11
+# define FBHC_NOEXCEPT throw()
+#else
+# define FBHC_CONSTEXPR11
+# define FBHC_NOEXCEPT
+#endif
+#if defined(__cpp_constexpr) && __cpp_constexpr >= 201304L
+# define FBHC_CONSTEXPR14 constexpr
+#else
+# define FBHC_CONSTEXPR14
+#endif
+#ifdef __has_builtin
+# if defined(__GNUC__) && defined(__BMI2__) && defined(__x86_64__) && !defined(__znver1__) && !defined(__znver2__) && __has_builtin(__builtin_ia32_pext_di)
+#  define FBHC_HAS_PEXT
+# endif
 #endif
 #ifdef __GNUC__
 __attribute__((__always_inline__, const, __flatten__, __unused__))
 #endif
-#ifdef __cplusplus
-constexpr
-#endif
-static inline uint64_t
+FBHC_CONSTEXPR14
+static FBHC_INLINE uint64_t
 representative_bits_hash(uint64_t input)
-#ifdef __cplusplus
-noexcept
-#endif
+FBHC_NOEXCEPT
 {
   uint64_t result = 0;
 
-#if (defined(__BMI2__) && defined(__x86_64__)) && defined(__has_builtin) && defined(__GNUC__) && __has_builtin(__builtin_ia32_pext_di) && !defined(__znver1__) && !defined(__znver2__)
+#ifdef FBHC_HAS_PEXT
 result = __builtin_ia32_pext_di((uint64_t)input, 0x4020803);
 #else
   result |= ((input >> 0) & 0x3) << 0;
@@ -80,56 +104,74 @@ result = __builtin_ia32_pext_di((uint64_t)input, 0x4020803);
 #endif
   return result;
 }
-static const FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = 32;
-static const uint64_t TABLE_REPR[REPRESENTATIVE_TABLE_SIZE] = {
-	[23 ] = 0x000000656C696877, // while
-	[17 ] = 0x000000006F686365, // echo
-	[14 ] = 0x00000074616F6C66, // float
-	[1  ] = 0x0000000000006669, // if
-	[2  ] = 0x00000065736C6166, // false
-	[24 ] = 0x000074706D6F7270, // prompt
-	[30 ] = 0x006E61656C6F6F62, // boolean
-	[22 ] = 0x0000000064696F76, // void
-	[18 ] = 0x00006E7275746572, // return
-	[11 ] = 0x0000676E69727473, // string
-	[5  ] = 0x0000000000746E69, // int
-	[16 ] = 0x0000000065757274, // true
-	[0  ] = 0x000000000074656C, // let
-	[10 ] = 0x6E6F6974636E7566, // function
-	[4  ] = 0x0000000000006F64, // do
+#undef FBHC_HAS_PEXT
+static FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = 32;
+static const uint64_t TABLE_REPR[32] = {
+	0x000000000074656C, /* let */
+	0x0000000000006669, /* if */
+	0x00000065736C6166, /* false */
+	0x0000000000000000, /* empty */
+	0x0000000000006F64, /* do */
+	0x0000000000746E69, /* int */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x6E6F6974636E7566, /* function */
+	0x0000676E69727473, /* string */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x00000074616F6C66, /* float */
+	0x0000000000000000, /* empty */
+	0x0000000065757274, /* true */
+	0x000000006F686365, /* echo */
+	0x00006E7275746572, /* return */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000064696F76, /* void */
+	0x000000656C696877, /* while */
+	0x000074706D6F7270, /* prompt */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x0000000000000000, /* empty */
+	0x006E61656C6F6F62, /* boolean */
 };
-static const uint64_t TABLE_FIB[] = {
-	[2  ] = 0x000000656C696877, // while
-	[7  ] = 0x000000006F686365, // echo
-	[14 ] = 0x00000074616F6C66, // float
-	[9  ] = 0x0000000000006669, // if
-	[6  ] = 0x00000065736C6166, // false
-	[11 ] = 0x000074706D6F7270, // prompt
-	[12 ] = 0x006E61656C6F6F62, // boolean
-	[0  ] = 0x0000000064696F76, // void
-	[5  ] = 0x00006E7275746572, // return
-	[3  ] = 0x0000676E69727473, // string
-	[15 ] = 0x0000000000746E69, // int
-	[10 ] = 0x0000000065757274, // true
-	[8  ] = 0x000000000074656C, // let
-	[4  ] = 0x6E6F6974636E7566, // function
-	[1  ] = 0x0000000000006F64, // do
+static FBHC_CONSTEXPR uint64_t TABLE_FIB[16] = {
+	0x0000000064696F76, /* void */
+	0x0000000000006F64, /* do */
+	0x000000656C696877, /* while */
+	0x0000676E69727473, /* string */
+	0x6E6F6974636E7566, /* function */
+	0x00006E7275746572, /* return */
+	0x00000065736C6166, /* false */
+	0x000000006F686365, /* echo */
+	0x000000000074656C, /* let */
+	0x0000000000006669, /* if */
+	0x0000000065757274, /* true */
+	0x000074706D6F7270, /* prompt */
+	0x006E61656C6F6F62, /* boolean */
+	0x0000000000000000, /* empty */
+	0x00000074616F6C66, /* float */
+	0x0000000000746E69, /* int */
 };
 #ifdef __GNUC__
 __attribute__((__always_inline__, const, __flatten__, __unused__))
 #endif
-#ifdef __cplusplus
-constexpr
-#endif
-static inline uint64_t
+FBHC_CONSTEXPR11
+static FBHC_INLINE uint64_t
 fib_hash(uint64_t input)
-#ifdef __cplusplus
-noexcept
-#endif
+FBHC_NOEXCEPT
 {
   return ((input * 0xF395CA4EF2D38ABB) >> 60);
 }
 #undef FBHC_CONSTEXPR
+#undef FBHC_CONSTEXPR11
+#undef FBHC_CONSTEXPR14
+#undef FBHC_NOEXCEPT
+#undef FBHC_INLINE
 ```
 
 Look up a keyword by packing it into a `u64` the same way (zero-padded,
@@ -138,5 +180,5 @@ little-endian), calling `fib_hash` (or `representative_bits_hash`), and comparin
 ## Errors
 
 - `KeyTooLong`: a keyword is longer than 8 bytes (16 with `--use128`).
-- `UnknownFlag` / `TooManyFiles` / `NoFileInArgs`: bad command line.
+- `UnknownFlag` / `TooManyFiles` / `NoFileInArgs` / `MissingPrefix`: bad command line.
 - `IdenticalKeys`: the input contains duplicates.

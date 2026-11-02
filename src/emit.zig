@@ -30,10 +30,32 @@ pub fn prelude(w: *std.Io.Writer, comptime K: type) !void
         \\
         \\#include <stdint.h>
         \\
-        \\#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || defined(__cplusplus)
+        \\#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || (defined(__cplusplus) && __cplusplus >= 201103L)
         \\# define FBHC_CONSTEXPR constexpr
         \\#else
         \\# define FBHC_CONSTEXPR const
+        \\#endif
+        \\#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || defined(__cplusplus)
+        \\# define FBHC_INLINE inline
+        \\#elif defined(__GNUC__)
+        \\# define FBHC_INLINE __inline__
+        \\#else
+        \\# define FBHC_INLINE
+        \\#endif
+        \\#if defined(__cplusplus) && __cplusplus >= 201103L
+        \\# define FBHC_CONSTEXPR11 constexpr
+        \\# define FBHC_NOEXCEPT noexcept
+        \\#elif defined(__cplusplus)
+        \\# define FBHC_CONSTEXPR11
+        \\# define FBHC_NOEXCEPT throw()
+        \\#else
+        \\# define FBHC_CONSTEXPR11
+        \\# define FBHC_NOEXCEPT
+        \\#endif
+        \\#if defined(__cpp_constexpr) && __cpp_constexpr >= 201304L
+        \\# define FBHC_CONSTEXPR14 constexpr
+        \\#else
+        \\# define FBHC_CONSTEXPR14
         \\#endif
         \\
     );
@@ -43,7 +65,7 @@ pub fn prelude(w: *std.Io.Writer, comptime K: type) !void
 pub fn epilogue(w: *std.Io.Writer, comptime K: type) !void
 {
     if (K == u128) try w.writeAll("#undef FBHC_U128\n");
-    try w.writeAll("#undef FBHC_CONSTEXPR\n");
+    try w.writeAll("#undef FBHC_CONSTEXPR\n#undef FBHC_CONSTEXPR11\n#undef FBHC_CONSTEXPR14\n#undef FBHC_NOEXCEPT\n#undef FBHC_INLINE\n");
 }
 
 /// Writes `v` as a C constant of type `cType(K)`.
@@ -60,17 +82,57 @@ pub fn writeConst(w: *std.Io.Writer, comptime K: type, v: K, comptime pad: bool)
     else try w.print("0x{X}", .{v});
 }
 
-pub fn functionHeader(w: *std.Io.Writer, comptime K: type, name: []const u8, noexcept: bool) !void
+fn writeCommentText(w: *std.Io.Writer, s: []const u8) !void
+{
+    for (s, 0..) |c, i|
+    {
+        try w.writeByte(c);
+        if (i + 1 == s.len) break;
+        if ((c == '*' and s[i + 1] == '/') or (c == '/' and s[i + 1] == '*')) try w.writeByte(' ');
+    }
+}
+
+pub fn writeSlots(w: *std.Io.Writer, comptime K: type, nums: []const K, strings: []const []const u8, slots: anytype) !void
+{
+    var next: u64 = 0;
+    while (true)
+    {
+        var found: ?usize = null;
+        var found_slot: u64 = std.math.maxInt(u64);
+        for (nums, 0..) |n, i|
+        {
+            const slot = slots.of(n);
+            if (slot >= next and slot < found_slot)
+            {
+                found = i;
+                found_slot = slot;
+            }
+        }
+        const i = found orelse return;
+        while (next < found_slot) : (next += 1)
+        {
+            try w.writeByte('\t');
+            try writeConst(w, K, if (next == 0) nums[0] else 0, true);
+            try w.writeAll(", /* empty */\n");
+        }
+        try w.writeByte('\t');
+        try writeConst(w, K, nums[i], true);
+        try w.writeAll(", /* ");
+        try writeCommentText(w, strings[i]);
+        try w.writeAll(" */\n");
+        next = found_slot + 1;
+    }
+}
+
+pub fn functionHeader(w: *std.Io.Writer, comptime K: type, prefix: []const u8, name: []const u8, noexcept: bool, single_return: bool) !void
 {
     try w.writeAll(
         \\#ifdef __GNUC__
         \\__attribute__((__always_inline__, const, __flatten__, __unused__))
         \\#endif
-        \\#ifdef __cplusplus
-        \\constexpr
-        \\#endif
         \\
     );
-    try w.print("static inline {s}\n{s}({s} input)\n", .{ cType(K), name, cType(K) });
-    if (noexcept) try w.writeAll("#ifdef __cplusplus\nnoexcept\n#endif\n");
+    try w.writeAll(if (single_return) "FBHC_CONSTEXPR11\n" else "FBHC_CONSTEXPR14\n");
+    try w.print("static FBHC_INLINE {s}\n{s}{s}({s} input)\n", .{ cType(K), prefix, name, cType(K) });
+    if (noexcept) try w.writeAll("FBHC_NOEXCEPT\n");
 }

@@ -87,16 +87,27 @@ pub fn find(comptime K: type, allocator: std.mem.Allocator, nums: []const K, bit
     return set;
 }
 
-pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, strings: []const []const u8) !void
+pub fn emitCode(w: *std.Io.Writer, comptime K: type, prefix: []const u8, mask: K, nums: []const K, strings: []const []const u8) !void
 {
     const S = std.math.Log2Int(K);
     const ty = emit.cType(K);
 
-    try emit.functionHeader(w, K, "representative_bits_hash", true);
+    const use_pext = @clz(mask) >= @bitSizeOf(K) - 64 or K == u64;
+    const table_size = @as(u64, 1) << @as(u6, @intCast(@popCount(mask)));
+
+    if (use_pext) try w.writeAll(
+        \\#ifdef __has_builtin
+        \\# if defined(__GNUC__) && defined(__BMI2__) && defined(__x86_64__) && !defined(__znver1__) && !defined(__znver2__) && __has_builtin(__builtin_ia32_pext_di)
+        \\#  define FBHC_HAS_PEXT
+        \\# endif
+        \\#endif
+        \\
+    );
+    try emit.functionHeader(w, K, prefix, "representative_bits_hash", true, false);
     try w.print("{{\n  {s} result = 0;\n\n", .{ty});
-    if (@clz(mask) >= @bitSizeOf(K) - 64 or K == u64)
+    if (use_pext)
     {
-        try w.writeAll("#if (defined(__BMI2__) && defined(__x86_64__)) && defined(__has_builtin) && defined(__GNUC__) && __has_builtin(__builtin_ia32_pext_di) && !defined(__znver1__) && !defined(__znver2__)\n");
+        try w.writeAll("#ifdef FBHC_HAS_PEXT\n");
         if (K == u64)
             try w.print("result = __builtin_ia32_pext_di((uint64_t)input, 0x{X});\n", .{mask})
         else
@@ -110,16 +121,15 @@ pub fn emitCode(w: *std.Io.Writer, comptime K: type, mask: K, nums: []const K, s
         try emit.writeConst(w, K, r.mask, false);
         try w.print(") << {d};\n", .{r.dest});
     }
-    if (@clz(mask) >= @bitSizeOf(K) - 64 or K == u64) try w.writeAll("#endif\n");
+    if (use_pext) try w.writeAll("#endif\n");
     try w.writeAll("  return result;\n}\n");
-    try w.print("static FBHC_CONSTEXPR uint64_t REPRESENTATIVE_TABLE_SIZE = {d};\n", .{@as(u64, 1) << @as(u6, @intCast(@popCount(mask)))});
-    try w.print("static const {s} TABLE_REPR[REPRESENTATIVE_TABLE_SIZE] = {{\n", .{ty});
-    for (nums, strings) |x, s|
-    {
-        try w.print("\t[{d:<3}] = ", .{@as(u64, @intCast(gather(K, x, mask)))});
-        try emit.writeConst(w, K, x, true);
-        try w.print(", // {s}\n", .{s});
-    }
+    if (use_pext) try w.writeAll("#undef FBHC_HAS_PEXT\n");
+    try w.print("static FBHC_CONSTEXPR uint64_t {s}REPRESENTATIVE_TABLE_SIZE = {d};\n", .{prefix, table_size});
+    try w.print("static const {s} {s}TABLE_REPR[{d}] = {{\n", .{ty, prefix, table_size});
+    try emit.writeSlots(w, K, nums, strings, struct {
+        mask: K,
+        pub fn of(self: @This(), x: K) u64 { return @intCast(gather(K, x, self.mask)); }
+    }{ .mask = mask });
     try w.writeAll("};\n");
     _ = S;
 }

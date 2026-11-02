@@ -43,18 +43,17 @@ pub fn find(comptime K: type, nums: []const K, bits_for_hash: usize) ?Found(K)
     return null;
 }
 
-pub fn emitCode(w: *std.Io.Writer, comptime K: type, found: Found(K), nums: []const K, strings: []const []const u8) !void
+pub fn emitCode(w: *std.Io.Writer, comptime K: type, prefix: []const u8, found: Found(K), nums: []const K, strings: []const []const u8) !void
 {
-    try w.print("static FBHC_CONSTEXPR {s} TABLE_FIB[] = {{\n", .{emit.cType(K)});
-    for (nums, strings) |n, s|
-    {
-        try w.print("\t[{d:<3}] = ", .{@as(u64, @intCast((n *% found.magic) >> found.shift))});
-        try emit.writeConst(w, K, n, true);
-        try w.print(", // {s}\n", .{s});
-    }
+    const table_size = @as(u64, 1) << @as(u6, @intCast(@bitSizeOf(K) - @as(usize, found.shift)));
+    try w.print("static FBHC_CONSTEXPR {s} {s}TABLE_FIB[{d}] = {{\n", .{emit.cType(K), prefix, table_size});
+    try emit.writeSlots(w, K, nums, strings, struct {
+        found: Found(K),
+        pub fn of(self: @This(), n: K) u64 { return @intCast((n *% self.found.magic) >> self.found.shift); }
+    }{ .found = found });
     try w.writeAll("};\n");
 
-    try emit.functionHeader(w, K, "fib_hash", true);
+    try emit.functionHeader(w, K, prefix, "fib_hash", true, true);
     try w.writeAll("{\n  return ((input * ");
     try emit.writeConst(w, K, found.magic, false);
     try w.print(") >> {d});\n}}\n", .{found.shift});

@@ -5,7 +5,7 @@ const fib = @import("fib.zig");
 const repr = @import("repr.zig");
 const tokenize = @import("tokenize.zig").tokenize;
 
-fn generate(comptime K: type, allocator: std.mem.Allocator, src: []const u8, w: *std.Io.Writer) !void
+fn generate(comptime K: type, allocator: std.mem.Allocator, src: []const u8, prefix: []const u8, w: *std.Io.Writer) !void
 {
     var toks = try tokenize(K, allocator, src);
     defer toks.deinit(allocator);
@@ -15,8 +15,8 @@ fn generate(comptime K: type, allocator: std.mem.Allocator, src: []const u8, w: 
     const bits_for_hash: usize = if (nums.len <= 1) 0 else std.math.log2_int_ceil(usize, nums.len);
 
     try emit.prelude(w, K);
-    if (try repr.find(K, allocator, nums, bits_for_hash)) |mask| try repr.emitCode(w, K, mask, nums, strings);
-    if (fib.find(K, nums, bits_for_hash)) |found| try fib.emitCode(w, K, found, nums, strings);
+    if (try repr.find(K, allocator, nums, bits_for_hash)) |mask| try repr.emitCode(w, K, prefix, mask, nums, strings);
+    if (fib.find(K, nums, bits_for_hash)) |found| try fib.emitCode(w, K, prefix, found, nums, strings);
     try emit.epilogue(w, K);
 }
 
@@ -39,6 +39,6 @@ pub fn main(ini: std.process.Init) !void
     var map = try file.createMemoryMap(io, .{.len = try file.length(io), .protection = .{ .read = true}});
     defer map.destroy(io);
 
-    if (opts.use128) try generate(u128, allocator, map.memory, w)
-    else try generate(u64, allocator, map.memory, w);
+    if (opts.use128) try generate(u128, allocator, map.memory, opts.prefix, w)
+    else try generate(u64, allocator, map.memory, opts.prefix, w);
 }
